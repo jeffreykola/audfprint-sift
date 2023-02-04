@@ -294,7 +294,7 @@ def setup_analyzer(args):
     # set default value for shifts depending on mode
     if analyzer.shifts == 0:
         # Default shift is 4 for match, otherwise 1
-        analyzer.shifts = 4 if args['match'] else 1
+        analyzer.shifts = 1 # 4 if args['match'] else 1
     analyzer.fail_on_error = not args['--continue-on-error']
     return analyzer
 

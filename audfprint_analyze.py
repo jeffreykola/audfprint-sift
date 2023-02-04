@@ -7,24 +7,29 @@ Class to do the analysis of wave files into hash constellations.
 2014-09-20 Dan Ellis dpwe@ee.columbia.edu
 """
 
+# TODO: downgrade to python 3.6 potentially
+
 from __future__ import division, print_function
 
+import math
 import os
+
+import librosa
 import numpy as np
-
+from bisect import bisect_left
 import scipy.signal
-
 # For reading/writing hashes to file
 import struct
 
 # For glob2hashtable, localtester
 import glob
 import time
-
+# import cv2
 import audio_read
 # For utility, glob2hashtable
 import hash_table
 import stft
+import cv2 as cv
 
 # ############### Globals ############### #
 # Special extension indicating precomputed fingerprint
@@ -86,10 +91,10 @@ def landmarks2hashes(landmarks):
     landmarks = np.array(landmarks)
     # Deal with special case of empty landmarks.
     if landmarks.shape[0] == 0:
-      return np.zeros((0, 2), dtype=np.int32)
+        return np.zeros((0, 2), dtype=np.int32)
     hashes = np.zeros((landmarks.shape[0], 2), dtype=np.int32)
-    hashes[:, 0] = landmarks[:, 0]
-    hashes[:, 1] = (((landmarks[:, 1] & B1_MASK) << B1_SHIFT)
+    hashes[:, 0] = landmarks[:, 0]  # all the anchor point absolute time values remain the same
+    hashes[:, 1] = (((landmarks[:, 1] & B1_MASK) << B1_SHIFT)  # manipulating hashes
                     | (((landmarks[:, 2] - landmarks[:, 1]) & DF_MASK)
                        << DF_SHIFT)
                     | (landmarks[:, 3] & DT_MASK))
@@ -124,10 +129,10 @@ class Analyzer(object):
 
     def __init__(self, density=DENSITY):
         self.density = density
-        self.target_sr = 11025
+        self.target_sr = 44100
         self.n_fft = N_FFT
         self.n_hop = N_HOP
-        self.shifts = 1
+        self.shifts = None
         # how wide to spreak peaks
         self.f_sd = 30.0
         # Maximum number of local maxima to keep per frame
@@ -189,7 +194,7 @@ class Analyzer(object):
             self.__sp_width = width
             self.__sp_len = npoints
             self.__sp_vals = np.exp(-0.5 * ((np.arange(-npoints, npoints + 1)
-                                             / width)**2))
+                                             / width) ** 2))
         # Now the actual function
         for pos, val in peaks:
             vec = np.maximum(vec, val * self.__sp_vals[np.arange(npoints)
@@ -251,6 +256,98 @@ class Analyzer(object):
                     peaks[peakpos, col - 1] = 0
             sthresh = a_dec * sthresh
         return peaks
+
+    def generate_spectrogram(self, d, sr, n_fft):
+        if len(d) == 0:
+            return []
+        if sr is None: sr = self.target_sr
+        if n_fft is None: n_fft = self.n_fft
+
+        # masking envelope decay constant
+        a_dec = (1 - 0.01 * (self.density * np.sqrt(self.n_hop / 352.8) / 35)) ** (1 / OVERSAMP)
+        # Take spectrogram
+        mywin = np.hanning(self.n_fft + 2)[1:-1]
+        sgram = np.abs(stft.stft(d, n_fft=self.n_fft,
+                                 hop_length=self.n_hop,
+                                 window=mywin))
+        sgrammax = np.max(sgram)
+        if sgrammax > 0.0:
+            sgram = np.log(np.maximum(sgram, np.max(sgram) / 1e6))
+            sgram = sgram - np.mean(sgram)
+        else:
+            # The sgram is identically zero, i.e., the input signal was identically
+            # zero.  Not good, but let's let it through for now.
+            print("find_peaks: Warning: input signal is identically zero.")
+        # High-pass filter onset emphasis
+        # [:-1,] discards top bin (nyquist) of sgram so bins fit in 8 bits
+        sgram = np.array([scipy.signal.lfilter([1, -1],
+                                               [1, -HPF_POLE ** (1 / OVERSAMP)], s_row)
+                          for s_row in sgram])[:-1, ]
+        return sgram
+
+    def select_index(self, frequencies, index):
+        central_frequency_index = bisect_left(list(frequencies), 318)
+        return math.floor(central_frequency_index * pow(2, (index - 1) / 12)), math.ceil(
+            central_frequency_index * pow(2, index / 12))
+
+    # TODO: add typing and more in-depth comments
+
+    def get_quantized_spectrogram(self, d):
+        """
+            Get the quantized spectrogram according to
+
+            SIFT-based local spectrogram image
+            descriptor: a novel feature for robust music
+            identification
+
+
+        """
+        # frame_size = 8192
+        # overlap = int(0.75 * frame_size)
+        mywin = np.hanning(self.n_fft + 2)[1:-1]
+        sgram = stft.stft(d, n_fft=self.n_fft,
+                                 hop_length=self.n_hop,
+                                 window=mywin)
+
+        frequencies = librosa.fft_frequencies(sr=self.target_sr, n_fft=self.n_fft)
+        BINS = 64
+        qsgram = np.zeros((BINS -1, sgram.shape[1]), dtype=np.complex128)
+        for i in range(0, BINS -1):
+            # get the ranges of frequency
+            start, end = self.select_index(frequencies, i)
+            # quantize the spectrogram
+            qsgram[i] = np.mean(sgram[start:end])
+        return sgram, qsgram
+
+    def sgramtoimg(self, sgram):
+        """
+            Generate the greyscale image for the quantized spectrogram
+        """
+        absolute_sgram = np.abs(sgram)
+        S = np.log(absolute_sgram, where=(absolute_sgram!=0))
+        _min = S.min()
+        _max = S.max()
+
+        return ((S - _min) / (_max - _min)) * 255.0
+
+    def find_descriptors(self, d):
+        """
+            New implementation to replace find peaks, by finding the descriptors and keypoints
+            Input: np.ndarray<float>, sr: int
+            Output: - list of (int, int)
+        """
+        sgram,qsgram = self.get_quantized_spectrogram(d)
+        sgram_img = self.sgramtoimg(sgram)
+        # img = cv.normalize(img, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1)
+        sgram_img = cv.normalize(sgram_img, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1)
+        cv.imwrite("./new_img.png", sgram_img)
+        sift = cv.SIFT_create()
+
+        kp, des = sift.detectAndCompute(sgram_img, None)
+
+        keypoints = set(map(lambda x: (round(x[0]), round(x[1])), [tuple(keypoint.pt) for keypoint in kp]))
+        keypoints = sorted(list(keypoints), key=lambda x: x[0])
+        return list(keypoints) # , des
 
     def find_peaks(self, d, sr):
         """ Find the local peaks in the spectrogram as basis for fingerprints.
@@ -329,7 +426,7 @@ class Analyzer(object):
                 for peak in peaks_at[col]:
                     pairsthispeak = 0
                     for col2 in range(col + self.mindt,
-                                       min(scols, col + self.targetdt)):
+                                      min(scols, col + self.targetdt)):
                         if pairsthispeak < self.maxpairsperpeak:
                             for peak2 in peaks_at[col2]:
                                 if abs(peak2 - peak) < self.targetdf:
@@ -349,6 +446,7 @@ class Analyzer(object):
             waveform, to reduce frame effects.  """
         ext = os.path.splitext(filename)[1]
         if ext == PRECOMPPKEXT:
+
             # short-circuit - precomputed fingerprint file
             peaks = peaks_load(filename)
             dur = np.max(peaks, axis=0)[0] * self.n_hop / self.target_sr
@@ -367,7 +465,8 @@ class Analyzer(object):
             # Store duration in a global because it's hard to handle
             dur = len(d) / sr
             if shifts is None or shifts < 2:
-                peaks = self.find_peaks(d, sr)
+                # peaks = self.find_peaks(d,sr)
+                peaks = self.find_descriptors(d)
             else:
                 # Calculate hashes with optional part-frame shifts
                 peaklists = []
@@ -387,6 +486,7 @@ class Analyzer(object):
             list of (time, hash) pairs.  If specified, resample to sr first.
             shifts > 1 causes hashes to be extracted from multiple shifts of
             waveform, to reduce frame effects.  """
+
         ext = os.path.splitext(filename)[1]
         if ext == PRECOMPEXT:
             # short-circuit - precomputed fingerprint file
@@ -565,7 +665,7 @@ def glob2hashtable(pattern, density=20.0):
 
     ht = hash_table.HashTable()
     filelist = glob.glob(pattern)
-    initticks = time.clock()
+    initticks = time.process_time()
     totdur = 0.0
     tothashes = 0
     for ix, file_ in enumerate(filelist):
@@ -573,7 +673,7 @@ def glob2hashtable(pattern, density=20.0):
         dur, nhash = g2h_analyzer.ingest(ht, file_)
         totdur += dur
         tothashes += nhash
-    elapsedtime = time.clock() - initticks
+    elapsedtime = time.process_time() - initticks
     print("Added", tothashes, "(", tothashes / totdur, "hashes/sec) at ",
           elapsedtime / totdur, "x RT")
     return ht

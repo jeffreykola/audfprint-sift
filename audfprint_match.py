@@ -98,9 +98,9 @@ class Matcher(object):
         # Tolerance window for time differences
         self.window = 1
         # Absolute minimum number of matching hashes to count as a match
-        self.threshcount = 5
+        self.threshcount = 3
         # How many hits to return?
-        self.max_returns = 1
+        self.max_returns = 3
         # How deep to search in return list?
         self.search_depth = 100
         # Sort those returns by time (instead of counts)?
@@ -472,13 +472,15 @@ class Matcher(object):
 
 def localtest():
     """Function to provide quick test"""
-    pat = '/Users/dpwe/projects/shazam/Nine_Lives/*mp3'
-    qry = 'query.mp3'
+    pat = './tests/data/Nine_Lives/*.mp3'
+    qry = './tests/data/query.mp3'
     hash_tab = audfprint_analyze.glob2hashtable(pat)
     matcher = Matcher()
     rslts, dur, nhash = matcher.match_file(audfprint_analyze.g2h_analyzer,
                                            hash_tab, qry)
+    print(rslts, dur, nhash)
     t_hop = 0.02322
+
     print("Matched", qry, "(", dur, "s,", nhash, "hashes)",
           "as", hash_tab.names[rslts[0][0]],
           "at", t_hop * float(rslts[0][2]), "with", rslts[0][1],
