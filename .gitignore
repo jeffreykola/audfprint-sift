@@ -55,3 +55,7 @@ docs/_build/
 fpstats
 fpmstats
 tmp.fpdb
+
+*.plkz
+*.pklz
+*.wav
