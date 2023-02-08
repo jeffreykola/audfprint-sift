@@ -283,6 +283,7 @@ def setup_analyzer(args):
     analyzer = audfprint_analyze.Analyzer()
     # Read parameters from command line/docopts
     analyzer.density = float(args['--density'])
+    analyzer.usePeaks = bool(args['--alg'])
     analyzer.maxpksperframe = int(args['--pks-per-frame'])
     analyzer.maxpairsperpeak = int(args['--fanout'])
     analyzer.f_sd = float(args['--freq-sd'])
@@ -361,6 +362,7 @@ Options:
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
   -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 0]
   -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a match [default: 2]
+  -a <alg>, --alg <alg>           Algorithm to be used 
   -N <val>, --min-count <val>     Minimum number of matching landmarks to count as a match [default: 5]
   -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
   -X, --exact-count               Flag to use more precise (but slower) match counting
@@ -392,8 +394,8 @@ __version__ = 20150406
 def main(argv):
     """ Main routine for the command-line interface to audfprint """
     # Other globals set from command line
-    args = docopt.docopt(USAGE, version=__version__, argv=argv[1:])
 
+    args = docopt.docopt(USAGE, version=__version__, argv=argv[1:])
     # Figure which command was chosen
     poss_cmds = ['new', 'add', 'precompute', 'merge', 'newmerge', 'match',
                  'list', 'remove']
@@ -416,6 +418,7 @@ def main(argv):
         args["--maxtimebits"] = int(args["--maxtimebits"])
     else:
         args["--maxtimebits"] = hash_table._bitsfor(int(args["--maxtime"]))
+
 
     # Setup the analyzer if we're using one (i.e., unless "merge")
     analyzer = setup_analyzer(args) if not (

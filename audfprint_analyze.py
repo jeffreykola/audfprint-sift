@@ -30,6 +30,7 @@ import audio_read
 import hash_table
 import stft
 import cv2 as cv
+import matplotlib.pyplot as plt
 
 # ############### Globals ############### #
 # Special extension indicating precomputed fingerprint
@@ -129,10 +130,12 @@ class Analyzer(object):
 
     def __init__(self, density=DENSITY):
         self.density = density
-        self.target_sr = 44100
+        self.target_sr = 11025
         self.n_fft = N_FFT
         self.n_hop = N_HOP
         self.shifts = None
+        # Determines whether we are using peaks or descriptors
+        self.usePeaks = None
         # how wide to spreak peaks
         self.f_sd = 30.0
         # Maximum number of local maxima to keep per frame
@@ -292,7 +295,7 @@ class Analyzer(object):
 
     # TODO: add typing and more in-depth comments
 
-    def get_quantized_spectrogram(self, d):
+    def get_spectrogram(self, d):
         """
             Get the quantized spectrogram according to
 
@@ -302,33 +305,31 @@ class Analyzer(object):
 
 
         """
-        # frame_size = 8192
-        # overlap = int(0.75 * frame_size)
         mywin = np.hanning(self.n_fft + 2)[1:-1]
         sgram = stft.stft(d, n_fft=self.n_fft,
-                                 hop_length=self.n_hop,
-                                 window=mywin)
-
-        frequencies = librosa.fft_frequencies(sr=self.target_sr, n_fft=self.n_fft)
-        BINS = 64
-        qsgram = np.zeros((BINS -1, sgram.shape[1]), dtype=np.complex128)
-        for i in range(0, BINS -1):
-            # get the ranges of frequency
-            start, end = self.select_index(frequencies, i)
-            # quantize the spectrogram
-            qsgram[i] = np.mean(sgram[start:end])
-        return sgram, qsgram
+                          hop_length=self.n_hop,
+                          window=mywin)
+        return sgram
 
     def sgramtoimg(self, sgram):
         """
             Generate the greyscale image for the quantized spectrogram
         """
-        absolute_sgram = np.abs(sgram)
-        S = np.log(absolute_sgram, where=(absolute_sgram!=0))
-        _min = S.min()
-        _max = S.max()
 
-        return ((S - _min) / (_max - _min)) * 255.0
+        absolute_sgram = np.abs(sgram)
+        log_sgram = np.log(absolute_sgram, where=(absolute_sgram != 0))
+
+        n_bins = 64
+
+        bin_edges = np.linspace(np.min(log_sgram), np.max(log_sgram), n_bins + 1)
+        bin_indices = np.digitize(log_sgram, bin_edges) - 1
+
+        quantized_spectrogram = bin_edges[bin_indices]
+
+        _min = np.min(quantized_spectrogram)
+        _max = np.max(quantized_spectrogram)
+
+        return ((quantized_spectrogram - _min) / (_max - _min)) * 255.0
 
     def find_descriptors(self, d):
         """
@@ -336,18 +337,27 @@ class Analyzer(object):
             Input: np.ndarray<float>, sr: int
             Output: - list of (int, int)
         """
-        sgram,qsgram = self.get_quantized_spectrogram(d)
+        sgram = self.get_spectrogram(d)
         sgram_img = self.sgramtoimg(sgram)
         # img = cv.normalize(img, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1)
         sgram_img = cv.normalize(sgram_img, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1)
-        cv.imwrite("./new_img.png", sgram_img)
+        # peaks = self.find_peaks(d, self.target_sr)
         sift = cv.SIFT_create()
 
         kp, des = sift.detectAndCompute(sgram_img, None)
 
         keypoints = set(map(lambda x: (round(x[0]), round(x[1])), [tuple(keypoint.pt) for keypoint in kp]))
+
+        # img_with_keypoints = cv.drawKeypoints(sgram_img, kp, None, flags=cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        # for pk in peaks:
+        #     cv.line(img_with_keypoints, (pk[0] - 5, pk[1]), (pk[0] + 5, pk[1]), (0, 0, 255), 2)
+        #     cv.line(img_with_keypoints, (pk[0], pk[1] - 5), (pk[0], pk[1] + 5), (0, 0, 255), 2)
+        #
+        # plt.imshow(img_with_keypoints)
+        # plt.show()
+
         keypoints = sorted(list(keypoints), key=lambda x: x[0])
-        return list(keypoints) # , des
+        return list(keypoints)
 
     def find_peaks(self, d, sr):
         """ Find the local peaks in the spectrogram as basis for fingerprints.
@@ -446,7 +456,6 @@ class Analyzer(object):
             waveform, to reduce frame effects.  """
         ext = os.path.splitext(filename)[1]
         if ext == PRECOMPPKEXT:
-
             # short-circuit - precomputed fingerprint file
             peaks = peaks_load(filename)
             dur = np.max(peaks, axis=0)[0] * self.n_hop / self.target_sr
@@ -465,8 +474,7 @@ class Analyzer(object):
             # Store duration in a global because it's hard to handle
             dur = len(d) / sr
             if shifts is None or shifts < 2:
-                # peaks = self.find_peaks(d,sr)
-                peaks = self.find_descriptors(d)
+                peaks = self.find_peaks(d, sr) if self.usePeaks else self.find_descriptors(d)
             else:
                 # Calculate hashes with optional part-frame shifts
                 peaklists = []

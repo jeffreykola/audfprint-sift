@@ -98,7 +98,7 @@ class Matcher(object):
         # Tolerance window for time differences
         self.window = 1
         # Absolute minimum number of matching hashes to count as a match
-        self.threshcount = 3
+        self.threshcount = 1
         # How many hits to return?
         self.max_returns = 3
         # How deep to search in return list?
@@ -373,6 +373,7 @@ class Matcher(object):
                                    "to", len(q_hashes), "hashes")
         # Run query
         rslts = self.match_hashes(ht, q_hashes)
+
         # Post filtering
         if self.sort_by_time:
             rslts = rslts[(-rslts[:, 2]).argsort(), :]
