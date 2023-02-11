@@ -284,6 +284,7 @@ def setup_analyzer(args):
     # Read parameters from command line/docopts
     analyzer.density = float(args['--density'])
     analyzer.usePeaks = bool(args['--alg'])
+    analyzer.split = int(args['--split'])
     analyzer.maxpksperframe = int(args['--pks-per-frame'])
     analyzer.maxpairsperpeak = int(args['--fanout'])
     analyzer.f_sd = float(args['--freq-sd'])
@@ -362,7 +363,8 @@ Options:
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
   -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 0]
   -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a match [default: 2]
-  -a <alg>, --alg <alg>           Algorithm to be used 
+  -a <alg>, --alg <alg>           Algorithm to be used
+  -s <val> --split <val>      Time frame to split the query track
   -N <val>, --min-count <val>     Minimum number of matching landmarks to count as a match [default: 5]
   -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
   -X, --exact-count               Flag to use more precise (but slower) match counting

@@ -134,6 +134,8 @@ class Analyzer(object):
         self.n_fft = N_FFT
         self.n_hop = N_HOP
         self.shifts = None
+        # Each window frame of a matching query track
+        self.split = 0
         # Determines whether we are using peaks or descriptors
         self.usePeaks = None
         # how wide to spreak peaks
@@ -449,11 +451,13 @@ class Analyzer(object):
 
         return landmarks
 
-    def wavfile2peaks(self, filename, shifts=None):
+    def wavfile2peaks(self, filename, shifts=None, d=None):
         """ Read a soundfile and return its landmark peaks as a
             list of (time, bin) pairs.  If specified, resample to sr first.
             shifts > 1 causes hashes to be extracted from multiple shifts of
             waveform, to reduce frame effects.  """
+        sr = self.target_sr
+        ext = os.path.splitext(filename)[1]
         ext = os.path.splitext(filename)[1]
         if ext == PRECOMPPKEXT:
             # short-circuit - precomputed fingerprint file
@@ -462,7 +466,10 @@ class Analyzer(object):
         else:
             try:
                 # [d, sr] = librosa.load(filename, sr=self.target_sr)
-                d, sr = audio_read.audio_read(filename, sr=self.target_sr, channels=1)
+                # Split the signal into overlapping frames
+                if d is None:
+                    d, sr = audio_read.audio_read(filename, sr=self.target_sr, channels=1)
+
             except Exception as e:  # audioread.NoBackendError:
                 message = "wavfile2peaks: Error reading " + filename
                 if self.fail_on_error:
@@ -489,7 +496,7 @@ class Analyzer(object):
         self.soundfilecount += 1
         return peaks
 
-    def wavfile2hashes(self, filename):
+    def wavfile2hashes(self, filename, d=None):
         """ Read a soundfile and return its fingerprint hashes as a
             list of (time, hash) pairs.  If specified, resample to sr first.
             shifts > 1 causes hashes to be extracted from multiple shifts of
@@ -505,7 +512,7 @@ class Analyzer(object):
             self.soundfiletotaldur += dur
             self.soundfilecount += 1
         else:
-            peaks = self.wavfile2peaks(filename, self.shifts)
+            peaks = self.wavfile2peaks(filename, self.shifts,d)
             if len(peaks) == 0:
                 return []
             # Did we get returned a list of lists of peaks due to shift?

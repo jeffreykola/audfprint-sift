@@ -55,17 +55,17 @@ def wavread(filename):
 
 def audio_read(filename, sr=None, channels=None):
     """Read a soundfile, return (d, sr)."""
-    if HAVE_FFMPEG:
-        return audio_read_ffmpeg(filename, sr, channels)
-    else:
-        data, samplerate = wavread(filename)
-        if channels == 1 and len(data.shape) == 2 and data.shape[-1] != 1:
-            # Convert stereo to mono.
-            data = np.mean(data, axis=-1)
-        if sr and sr != samplerate:
-            raise ValueError("Wav file has samplerate %f but %f requested." % (
-                samplerate, sr))
-        return data, samplerate
+    # if HAVE_FFMPEG:
+    #     return audio_read_ffmpeg(filename, sr, channels)
+    # else:
+    data, samplerate = wavread(filename)
+    if channels == 1 and len(data.shape) == 2 and data.shape[-1] != 1:
+        # Convert stereo to mono.
+        data = np.mean(data, axis=-1)
+    if sr and sr != samplerate:
+        raise ValueError("Wav file has samplerate %f but %f requested." % (
+            samplerate, sr))
+    return data, samplerate
 
 
 def audio_read_ffmpeg(filename, sr=None, channels=None):

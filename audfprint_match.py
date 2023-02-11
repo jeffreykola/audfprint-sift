@@ -351,13 +351,13 @@ class Matcher(object):
             hashesforhashes = self._unique_match_hashes(id, hits, mode)
             return results, hashesforhashes
 
-    def match_file(self, analyzer, ht, filename, number=None):
+    def match_file(self, analyzer, ht, filename, number=None, d=None):
         """ Read in an audio file, calculate its landmarks, query against
             hash table.  Return top N matches as (id, filterdmatchcount,
             timeoffs, rawmatchcount), also length of input file in sec,
             and count of raw query hashes extracted
         """
-        q_hashes = analyzer.wavfile2hashes(filename)
+        q_hashes = analyzer.wavfile2hashes(filename, d)
         # Fake durations as largest hash time
         if len(q_hashes) == 0:
             durd = 0.0
@@ -474,7 +474,8 @@ class Matcher(object):
 def localtest():
     """Function to provide quick test"""
     pat = './tests/data/Nine_Lives/*.mp3'
-    qry = './tests/data/query.mp3'
+    # qry = './tests/data/query.mp3'
+    qry = '../data/songs/query/T001.wav'
     hash_tab = audfprint_analyze.glob2hashtable(pat)
     matcher = Matcher()
     rslts, dur, nhash = matcher.match_file(audfprint_analyze.g2h_analyzer,
