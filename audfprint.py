@@ -284,7 +284,6 @@ def setup_analyzer(args):
     # Read parameters from command line/docopts
     analyzer.density = float(args['--density'])
     analyzer.usePeaks = bool(args['--alg'])
-    analyzer.split = int(args['--split'])
     analyzer.maxpksperframe = int(args['--pks-per-frame'])
     analyzer.maxpairsperpeak = int(args['--fanout'])
     analyzer.f_sd = float(args['--freq-sd'])

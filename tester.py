@@ -29,19 +29,20 @@ def create_frames(filename, frame_size, hop_length):
 
 def localtest():
     """Function to provide quick test"""
-    filename = "../data/songs/query/T001.wav"
+    filename = "../data/songs/query/T008.wav"
     database_filename = './fpeaks.pklz'
 
     chunked_queries = create_frames(filename, 12, 6)
     matcher = audfprint_match.Matcher()
     analyzer = audfprint_analyze.Analyzer(density=20)
+    analyzer.usePeaks = True
     hash_tab = HashTable(database_filename)
 
     for qry in chunked_queries:
-        rslts, dur, nhash = matcher.match_file(analyzer,
-                                               hash_tab, filename, d=qry)
-        for res in rslts:
-            print(hash_tab.names[res[0]])
+        try:
+            matcher.illustrate_match(analyzer, hash_tab,'',d=qry)
+        except:
+            print("no match")
 
 
 

@@ -262,12 +262,9 @@ class Analyzer(object):
             sthresh = a_dec * sthresh
         return peaks
 
-    def generate_spectrogram(self, d, sr, n_fft):
+    def generate_spectrogram(self, d):
         if len(d) == 0:
             return []
-        if sr is None: sr = self.target_sr
-        if n_fft is None: n_fft = self.n_fft
-
         # masking envelope decay constant
         a_dec = (1 - 0.01 * (self.density * np.sqrt(self.n_hop / 352.8) / 35)) ** (1 / OVERSAMP)
         # Take spectrogram
@@ -313,9 +310,10 @@ class Analyzer(object):
                           window=mywin)
         return sgram
 
-    def sgramtoimg(self, sgram):
+    def quantize_spectrogram(self, sgram):
         """
             Generate the greyscale image for the quantized spectrogram
+            Output: 2D array of points
         """
 
         absolute_sgram = np.abs(sgram)
@@ -339,24 +337,16 @@ class Analyzer(object):
             Input: np.ndarray<float>, sr: int
             Output: - list of (int, int)
         """
-        sgram = self.get_spectrogram(d)
-        sgram_img = self.sgramtoimg(sgram)
-        # img = cv.normalize(img, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1)
-        sgram_img = cv.normalize(sgram_img, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1)
-        # peaks = self.find_peaks(d, self.target_sr)
+        sgram = self.generate_spectrogram(d)
+        quantized_spectrogram = self.quantize_spectrogram(sgram)
+        sgram_img = cv.normalize(quantized_spectrogram, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1)
+
+
         sift = cv.SIFT_create()
 
         kp, des = sift.detectAndCompute(sgram_img, None)
 
         keypoints = set(map(lambda x: (round(x[0]), round(x[1])), [tuple(keypoint.pt) for keypoint in kp]))
-
-        # img_with_keypoints = cv.drawKeypoints(sgram_img, kp, None, flags=cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-        # for pk in peaks:
-        #     cv.line(img_with_keypoints, (pk[0] - 5, pk[1]), (pk[0] + 5, pk[1]), (0, 0, 255), 2)
-        #     cv.line(img_with_keypoints, (pk[0], pk[1] - 5), (pk[0], pk[1] + 5), (0, 0, 255), 2)
-        #
-        # plt.imshow(img_with_keypoints)
-        # plt.show()
 
         keypoints = sorted(list(keypoints), key=lambda x: x[0])
         return list(keypoints)
@@ -512,7 +502,7 @@ class Analyzer(object):
             self.soundfiletotaldur += dur
             self.soundfilecount += 1
         else:
-            peaks = self.wavfile2peaks(filename, self.shifts,d)
+            peaks = self.wavfile2peaks(filename, self.shifts, d)
             if len(peaks) == 0:
                 return []
             # Did we get returned a list of lists of peaks due to shift?

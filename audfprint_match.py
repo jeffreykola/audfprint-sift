@@ -420,12 +420,17 @@ class Matcher(object):
                     self.illustrate_match(analyzer, ht, qry)
         return msgrslt
 
-    def illustrate_match(self, analyzer, ht, filename):
+
+
+
+    def illustrate_match(self, analyzer, ht, filename, d=None):
         """ Show the query fingerprints and the matching ones
             plotted over a spectrogram """
         # Make the spectrogram
         # d, sr = librosa.load(filename, sr=analyzer.target_sr)
-        d, sr = audio_read.audio_read(filename, sr=analyzer.target_sr, channels=1)
+        if d is None:
+            d, sr = audio_read.audio_read(filename, sr=analyzer.target_sr, channels=1)
+
         sgram = np.abs(stft.stft(d, n_fft=analyzer.n_fft,
                                  hop_length=analyzer.n_hop,
                                  window=np.hanning(analyzer.n_fft + 2)[1:-1]))
@@ -440,11 +445,11 @@ class Matcher(object):
                                                    [1, -HPF_POLE], s_row)
                               for s_row in sgram])[:-1, ]
         sgram = sgram - np.max(sgram)
-        librosa.display.specshow(sgram, sr=sr, hop_length=analyzer.n_hop,
+        librosa.display.specshow(sgram, sr=analyzer.target_sr, hop_length=analyzer.n_hop,
                                  y_axis='linear', x_axis='time',
                                  cmap='gray_r', vmin=-80.0, vmax=0)
         # Do the match?
-        q_hashes = analyzer.wavfile2hashes(filename)
+        q_hashes = analyzer.wavfile2hashes(filename, d)
         # Run query, get back the hashes for match zero
         results, matchhashes = self.match_hashes(ht, q_hashes, hashesfor=0)
         if self.sort_by_time:
@@ -453,11 +458,11 @@ class Matcher(object):
         lms = audfprint_analyze.hashes2landmarks(q_hashes)
         mlms = audfprint_analyze.hashes2landmarks(matchhashes)
         # Overplot on the spectrogram
-        time_scale = analyzer.n_hop / float(sr)
-        freq_scale = float(sr)/analyzer.n_fft
-        plt.plot(time_scale * np.array([[x[0], x[0] + x[3]] for x in lms]).T,
-                 freq_scale * np.array([[x[1], x[2]] for x in lms]).T,
-                 '.-g')
+        time_scale = analyzer.n_hop / float(analyzer.target_sr)
+        freq_scale = float(analyzer.target_sr)/analyzer.n_fft
+        # plt.plot(time_scale * np.array([[x[0], x[0] + x[3]] for x in lms]).T,
+        #          freq_scale * np.array([[x[1], x[2]] for x in lms]).T,
+        #          '.-g')
         plt.plot(time_scale * np.array([[x[0], x[0] + x[3]] for x in mlms]).T,
                  freq_scale * np.array([[x[1], x[2]] for x in mlms]).T,
                  '.-r')
@@ -479,7 +484,7 @@ def localtest():
     hash_tab = audfprint_analyze.glob2hashtable(pat)
     matcher = Matcher()
     rslts, dur, nhash = matcher.match_file(audfprint_analyze.g2h_analyzer,
-                                           hash_tab, qry)
+                                           hash_tab, qry,d=None)
     print(rslts, dur, nhash)
     t_hop = 0.02322
 
