@@ -11,8 +11,10 @@ Class to do the analysis of wave files into hash constellations.
 
 from __future__ import division, print_function
 
+import copy
 import math
 import os
+from copy import deepcopy
 
 import librosa
 import numpy as np
@@ -265,8 +267,6 @@ class Analyzer(object):
     def generate_spectrogram(self, d):
         if len(d) == 0:
             return []
-        # masking envelope decay constant
-        a_dec = (1 - 0.01 * (self.density * np.sqrt(self.n_hop / 352.8) / 35)) ** (1 / OVERSAMP)
         # Take spectrogram
         mywin = np.hanning(self.n_fft + 2)[1:-1]
         sgram = np.abs(stft.stft(d, n_fft=self.n_fft,
@@ -287,28 +287,6 @@ class Analyzer(object):
                           for s_row in sgram])[:-1, ]
         return sgram
 
-    def select_index(self, frequencies, index):
-        central_frequency_index = bisect_left(list(frequencies), 318)
-        return math.floor(central_frequency_index * pow(2, (index - 1) / 12)), math.ceil(
-            central_frequency_index * pow(2, index / 12))
-
-    # TODO: add typing and more in-depth comments
-
-    def get_spectrogram(self, d):
-        """
-            Get the quantized spectrogram according to
-
-            SIFT-based local spectrogram image
-            descriptor: a novel feature for robust music
-            identification
-
-
-        """
-        mywin = np.hanning(self.n_fft + 2)[1:-1]
-        sgram = stft.stft(d, n_fft=self.n_fft,
-                          hop_length=self.n_hop,
-                          window=mywin)
-        return sgram
 
     def quantize_spectrogram(self, sgram):
         """
@@ -346,10 +324,45 @@ class Analyzer(object):
 
         kp, des = sift.detectAndCompute(sgram_img, None)
 
-        keypoints = set(map(lambda x: (round(x[0]), round(x[1])), [tuple(keypoint.pt) for keypoint in kp]))
 
+        filtered_keypoints = self.filter_descriptors(sgram.shape,kp,delta=10, frequency_delta=10)
+        print(len(filtered_keypoints))
+
+
+        keypoints = set(map(lambda x: (round(x[0]), round(x[1])), [tuple(keypoint.pt) for keypoint in kp]))
         keypoints = sorted(list(keypoints), key=lambda x: x[0])
+
         return list(keypoints)
+
+
+    def filter_descriptors(self, sgram_shape, keypoints, delta=10, frequency_delta=10):
+        """
+        :params:
+            keypoints - cv2.keypoint from opencv
+            list of keypoints obtained from find_descriptors
+            delta - int
+            delta of square window to consider the 'best' keypoint
+
+        """
+        # Get the subarray of keypoints that are within a certain (freq, time) window
+        keypoints = sorted(keypoints, key=lambda x: x.response)
+
+        filtered_keypoints = []
+        f,t = sgram_shape
+        tot = 0
+        for current_time in range(delta, t, delta):
+            keypoints_in_time_delta = filter(lambda x: x.pt[0] >= (current_time-delta) and x.pt[0] < current_time, keypoints)
+            for band in range(frequency_delta, f, frequency_delta):
+                n_kp = len(list(keypoints_in_time_delta))
+                if n_kp:
+                    if n_kp <= 2:
+                        tot+=n_kp
+
+        # Choosing the number of keypoints to obtain
+
+        # # # return filtered_keypoints
+
+
 
     def find_peaks(self, d, sr):
         """ Find the local peaks in the spectrogram as basis for fingerprints.

@@ -30,12 +30,12 @@ def create_frames(filename, frame_size, hop_length):
 def localtest():
     """Function to provide quick test"""
     filename = "../data/songs/query/T008.wav"
-    database_filename = './fpeaks.pklz'
+    database_filename = './fpdes.pklz'
 
     chunked_queries = create_frames(filename, 12, 6)
     matcher = audfprint_match.Matcher()
     analyzer = audfprint_analyze.Analyzer(density=20)
-    analyzer.usePeaks = True
+    analyzer.usePeaks = False
     hash_tab = HashTable(database_filename)
 
     for qry in chunked_queries:

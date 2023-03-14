@@ -465,7 +465,7 @@ class Matcher(object):
         #          '.-g')
         plt.plot(time_scale * np.array([[x[0], x[0] + x[3]] for x in mlms]).T,
                  freq_scale * np.array([[x[1], x[2]] for x in mlms]).T,
-                 '.-r')
+                 '-r', alpha=0.25)
         # Add title
         plt.title(filename + " : Matched as " + ht.names[results[0][0]]
                   + (" with %d of %d hashes" % (len(matchhashes),
