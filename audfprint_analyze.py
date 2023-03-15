@@ -287,7 +287,6 @@ class Analyzer(object):
                           for s_row in sgram])[:-1, ]
         return sgram
 
-
     def quantize_spectrogram(self, sgram):
         """
             Generate the greyscale image for the quantized spectrogram
@@ -319,23 +318,19 @@ class Analyzer(object):
         quantized_spectrogram = self.quantize_spectrogram(sgram)
         sgram_img = cv.normalize(quantized_spectrogram, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1)
 
-
         sift = cv.SIFT_create()
 
         kp, des = sift.detectAndCompute(sgram_img, None)
 
+        filtered_keypoints = self.prune_descriptors(sgram.shape, kp, delta=20)
 
-        filtered_keypoints = self.filter_descriptors(sgram.shape,kp,delta=10, frequency_delta=10)
-        print(len(filtered_keypoints))
-
-
-        keypoints = set(map(lambda x: (round(x[0]), round(x[1])), [tuple(keypoint.pt) for keypoint in kp]))
-        keypoints = sorted(list(keypoints), key=lambda x: x[0])
+        keypoints = set(
+            map(lambda x: (round(x[0]), round(x[1])), [tuple(keypoint.pt) for keypoint in filtered_keypoints]))
+        keypoints = sorted(keypoints, key=lambda x: x[0])
 
         return list(keypoints)
 
-
-    def filter_descriptors(self, sgram_shape, keypoints, delta=10, frequency_delta=10):
+    def prune_descriptors(self, sgram_shape, keypoints, delta, frequency_delta=1):
         """
         :params:
             keypoints - cv2.keypoint from opencv
@@ -344,25 +339,24 @@ class Analyzer(object):
             delta of square window to consider the 'best' keypoint
 
         """
-        # Get the subarray of keypoints that are within a certain (freq, time) window
-        keypoints = sorted(keypoints, key=lambda x: x.response)
-
         filtered_keypoints = []
-        f,t = sgram_shape
-        tot = 0
-        for current_time in range(delta, t, delta):
-            keypoints_in_time_delta = filter(lambda x: x.pt[0] >= (current_time-delta) and x.pt[0] < current_time, keypoints)
-            for band in range(frequency_delta, f, frequency_delta):
-                n_kp = len(list(keypoints_in_time_delta))
-                if n_kp:
-                    if n_kp <= 2:
-                        tot+=n_kp
+        f, t = sgram_shape
 
-        # Choosing the number of keypoints to obtain
-
-        # # # return filtered_keypoints
-
-
+        # The following few lines obtain all the keypoints that belong to a square window (delta x delta) over the
+        # spectrogram
+        for band in range(delta, f, delta):
+            frequency_filtered = [x for x in keypoints if ((band - delta) <= x.pt[
+                1] <= band)]
+            for current_time in range(delta, t, delta):
+                freq_time_filtered = filter(lambda x: (current_time - delta) <= x.pt[0] <= current_time,
+                                            frequency_filtered)
+                # if the filtered list only has one keypoint, choose it otherwise choose the keypoint with the max response
+                freq_time_filtered = list(freq_time_filtered)
+                if len(freq_time_filtered) == 1:
+                    filtered_keypoints.append(frequency_filtered[0])
+                elif len(freq_time_filtered) > 0:
+                    filtered_keypoints.append(max(freq_time_filtered, key=lambda x: x.response))
+        return filtered_keypoints
 
     def find_peaks(self, d, sr):
         """ Find the local peaks in the spectrogram as basis for fingerprints.
